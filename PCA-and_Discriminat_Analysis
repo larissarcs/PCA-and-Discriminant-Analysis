@@ -1,0 +1,412 @@
+## read the data
+
+dados=read.table("data.txt", header=TRUE)
+dados
+
+
+head(dados)
+
+n = dim(dados)[1]
+
+X = as.matrix(dados[1:8])
+X
+grupos = as.matrix(dados[9])
+grupos
+
+## Covariance matrix
+
+S = var(X)
+S
+
+## PCA using Covariance matrix
+acp_S = princomp(X)
+
+## Explained variance proportion
+summary(acp_S)
+
+## Loadings 
+
+loadings(acp_S)
+
+## suppressed loadings
+
+unclass(loadings(acp_S))
+
+## Scores of PCA
+
+Y = acp_S$scores
+Y
+
+## non-standard scores
+coefs = unclass(loadings(acp_S))
+escoresNP=X%*%coefs
+escoresNP
+
+
+boxplot(escoresNP)
+## Matriz de correlacoes entre variaveis originais e componentes principais
+
+Ryx = cor(X,Y)
+Ryx
+
+## biplot graph
+
+biplot(acp_S)
+
+dadosA=cbind(escoresNP,grupos)
+dadosA
+
+####################################
+#       DISCRIMINAT ANALYSIS      #
+####################################
+
+library(MASS)
+library(klaR)
+library(mda)
+
+
+#NORMALITY TEST
+ 
+library(royston)
+royston.test(escoresNP)
+
+
+
+#homecedasticity test
+
+
+library(biotools)
+
+boxM(escoresNP,grupos)
+
+
+#TRAINING AND TEST SAMPLES
+
+set.seed(432100) #fix seed
+
+nT = dim(dadosA)[1]
+nT
+
+p=0.75
+
+trind = sample(1:nT,floor(p*n),FALSE)
+trind
+
+Xtreino = escoresNP[trind,]
+Xtreino
+
+Ytreino = grupos[trind]
+Ytreino
+
+teind = setdiff(1:n,trind)
+teind
+
+Xteste = escoresNP[teind,]
+Xteste
+
+Yteste = grupos[teind]
+Yteste
+
+##discriminant analysis
+
+dadosfLDA <- lda(Xtreino, Ytreino)
+dadosfLDA
+
+
+b = predict(dadosfLDA,Xteste)
+b
+c=b$class
+c
+
+library(ks)
+tab = compare(c,Yteste)
+tab
+
+erro = tab$error
+
+erro
+
+## scores from discriminat analysis (values of LD1 and LD2 for each studied slope)
+
+plot(dadosfLDA)
+
+coefsad = coefficients(dadosfLDA)
+coefsad
+
+## Scores from Discriminant Analysis (vvalues LD1 e LD2 for each slope)
+escoresdiscrim = b$x
+escoresdiscrim
+escoresdiscrimNP = escoresNP%*%coefsad
+escoresdiscrimNP
+
+plot(escoresdiscrimNP, xlim=c(4,20),ylim=c(-2,8), col = grupos,pch=19,
+     xlab = "LD1",
+     ylab = "LD2")
+title("Likelihood",cex.main = 1.1)
+legend("topleft", c("Low","Medium","High"), col = c("black", "red","green"),
+       lty=1,bty="n", ncol=1)
+
+########### Contruction of confidence ellipses - bootstrap method
+
+# discriminat scores plus status
+
+jescores = as.data.frame(cbind(escoresdiscrimNP, grupos)) 
+jescores
+
+
+#Separating the classes
+
+x1 = as.matrix(jescores[jescores$Status=='1',-3])
+x1
+
+
+
+x2 = as.matrix(jescores[jescores$Status=='2',-3])
+x2
+
+
+
+x3 = as.matrix(jescores[jescores$Status=='3',-3])
+x3
+
+
+
+n1 = dim(x1)[1]
+n1
+n2 = dim(x2)[1]
+n2
+n3 = dim(x3)[1]
+n3
+
+# signifficance level 0.2
+set.seed(123)
+B = 10000
+alpha0.20 = 0.20
+alpha0.10 = 0.10
+alpha0.05 = 0.05
+
+
+
+MDist10.20 = matrix(NA,B,1)
+MD1 = matrix(NA,n1,1)
+MDist10.10 = matrix(NA,B,1)
+MD1 = matrix(NA,n1,1)
+MDist10.05 = matrix(NA,B,1)
+MD1 = matrix(NA,n1,1)
+
+MDist20.20 = matrix(NA,B,1)
+MD2 = matrix(NA,n2,1)
+MDist20.10 = matrix(NA,B,1)
+MD2 = matrix(NA,n2,1)
+MDist20.05 = matrix(NA,B,1)
+MD2 = matrix(NA,n2,1)
+
+MDist30.20 = matrix(NA,B,1)
+MD3 = matrix(NA,n3,1)
+MDist30.10 = matrix(NA,B,1)
+MD3 = matrix(NA,n3,1)
+MDist30.05 = matrix(NA,B,1)
+MD3 = matrix(NA,n3,1)
+
+
+
+
+for(i in 1:B){
+  ind_boot_G1 = sample(1:n1, n1,replace = TRUE)
+  amostra_boot_G1 = as.matrix(x1[ind_boot_G1,])
+  Xbar_G1 = colMeans(amostra_boot_G1)
+  S_G1 = var(amostra_boot_G1)
+  S_G1_inv = solve(S_G1)
+  for(j in 1:n1){
+    MD1[j] = t(amostra_boot_G1[j,]-Xbar_G1)%*%S_G1_inv%*%(amostra_boot_G1[j,]-Xbar_G1)
+  }
+  MDist10.20[i] = quantile(MD1,probs = (1-alpha0.20))
+  MDist10.10[i] = quantile(MD1,probs = (1-alpha0.10))
+  MDist10.05[i] = quantile(MD1,probs = (1-alpha0.05))
+}
+
+for(i in 1:B){
+  ind_boot_G2 = sample(1:n2, n2,replace = TRUE)
+  amostra_boot_G2 = as.matrix(x2[ind_boot_G2,])
+  Xbar_G2 = colMeans(amostra_boot_G2)
+  S_G2 = var(amostra_boot_G2)
+  S_G2_inv = solve(S_G2)
+  for(j in 1:n2){
+    MD2[j] = t(amostra_boot_G2[j,]-Xbar_G2)%*%S_G2_inv%*%(amostra_boot_G2[j,]-Xbar_G2)
+  }
+  MDist20.20[i] = quantile(MD2,probs = (1-alpha0.20))
+  MDist20.10[i] = quantile(MD2,probs = (1-alpha0.10))
+  MDist20.05[i] = quantile(MD2,probs = (1-alpha0.05))
+}
+
+for(i in 1:B){
+  ind_boot_G3 = sample(1:n3, n3,replace = TRUE)
+  amostra_boot_G3 = as.matrix(x3[ind_boot_G3,])
+  Xbar_G3 = colMeans(amostra_boot_G3)
+  S_G3 = var(amostra_boot_G3)
+  S_G3_inv = solve(S_G3)
+  for(j in 1:n3){
+    MD3[j] = t(amostra_boot_G3[j,]-Xbar_G3)%*%S_G3_inv%*%(amostra_boot_G3[j,]-Xbar_G3)
+  }
+  MDist30.20[i] = quantile(MD3,probs = (1-alpha0.20))
+  MDist30.10[i] = quantile(MD3,probs = (1-alpha0.10))
+  MDist30.05[i] = quantile(MD3,probs = (1-alpha0.05))
+}
+
+
+summary(MDist10.20)
+summary(MDist10.10)
+summary(MDist10.05)
+
+summary(MDist20.20)
+summary(MDist20.10)
+summary(MDist20.05)
+
+summary(MDist30.20)
+summary(MDist30.10)
+summary(MDist30.05)
+
+
+
+front_boot_G10.20 = round(mean(MDist10.20),3)
+front_boot_G10.20
+front_boot_G10.10 = round(mean(MDist10.10),3)
+front_boot_G10.10
+front_boot_G10.05 = round(mean(MDist10.05),3)
+front_boot_G10.05
+
+front_boot_G20.20 = round(mean(MDist20.20),3)
+front_boot_G20.20
+front_boot_G20.10 = round(mean(MDist20.10),3)
+front_boot_G20.10
+front_boot_G20.05 = round(mean(MDist20.05),3)
+front_boot_G20.05
+
+front_boot_G30.20 = round(mean(MDist30.20),3)
+front_boot_G30.20
+front_boot_G30.10 = round(mean(MDist30.10),3)
+front_boot_G30.10
+front_boot_G30.05 = round(mean(MDist30.05),3)
+front_boot_G30.05
+
+
+## Ploting of discriminat scores
+
+
+plot(escoresdiscrimNP, xlim=c(4,20),ylim=c(-2,8),col = grupos,pch=19,
+     xlab = "LD1",
+     ylab = "LD2")
+title("Likelihood",cex.main = 1.1)
+legend("topleft", c("Low","Medium","High"), col = c("black", "red","green"),
+       lty=1,bty="n", ncol=1)
+
+library(ellipse)
+
+
+### Construction of confidence ellipse (1-alpha)% for class 1 (Low)
+
+plot(escoresdiscrimNP, xlim=c(4,20),ylim=c(-2,8),col = grupos,pch=19,
+     xlab = "LD1",
+     ylab = "LD2")
+title("Confidence Ellipses - likelihood",cex.main = 1.1)
+legend("topleft", c("Low","Medium","High"), col = c("black", "red","green"),
+       lty=1,bty="n", ncol=1)
+xbarraG1 = round(apply(x1,2,"mean"),3)
+xbarraG1
+SG1 = round(var(x1),3)
+SG1
+ISG1 = round(solve(SG1),3)
+ISG1
+distancias_G1 = matrix(0,n1,1)
+for(j in 1:n1){
+  distancias_G1[j] = t(x1[j,]-xbarraG1)%*%ISG1%*%(x1[j,]-xbarraG1)
+}
+ind_sel_G10.20 = x1[distancias_G1 < front_boot_G10.20,]
+lines(ellipse(SG1,centre=xbarraG1,t=sqrt(front_boot_G10.20),npoints=1000),col="yellow", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+ind_sel_G10.10 = x1[distancias_G1 < front_boot_G10.10,]
+lines(ellipse(SG1,centre=xbarraG1,t=sqrt(front_boot_G10.10),npoints=1000),col="yellow", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+ind_sel_G10.05 = x1[distancias_G1 < front_boot_G10.05,]
+lines(ellipse(SG1,centre=xbarraG1,t=sqrt(front_boot_G10.05),npoints=1000),col="yellow", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+## Means vector of "low" class
+points(xbarraG1[1],xbarraG1[2], col='blue',pch=24)
+
+### Construction of confidence ellipse (1-alpha)% for class 2 (medium)
+
+xbarraG2 = round(apply(x2,2,"mean"),3)
+xbarraG2
+SG2 = round(var(x2),3)
+SG2
+ISG2 = round(solve(SG2),3)
+ISG2
+distancias_G2 = matrix(0,n2,1)
+for(j in 1:n2){
+  distancias_G2[j] = t(x2[j,]-xbarraG2)%*%ISG2%*%(x2[j,]-xbarraG2)
+}
+ind_sel_G20.20 = x2[distancias_G2 < front_boot_G20.20,]
+lines(ellipse(SG2,centre=xbarraG2,t=sqrt(front_boot_G20.20),npoints=1000),col="red", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+ind_sel_G20.10 = x2[distancias_G2 < front_boot_G20.10,]
+lines(ellipse(SG2,centre=xbarraG2,t=sqrt(front_boot_G20.10),npoints=1000),col="red", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+ind_sel_G20.05 = x2[distancias_G2 < front_boot_G20.05,]
+lines(ellipse(SG2,centre=xbarraG2,t=sqrt(front_boot_G20.05),npoints=1000),col="yellow", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+## Means vector of "medium" class
+points(xbarraG2[1],xbarraG2[2], col='blue',pch=24)
+
+
+### Construction of confidence ellipse (1-alpha)% for class 3 (high)
+
+xbarraG3 = round(apply(x3,2,"mean"),3)
+xbarraG3
+SG3 = round(var(x3),3)
+SG3
+ISG3 = round(solve(SG3),3)
+ISG3
+distancias_G3 = matrix(0,n3,1)
+for(j in 1:n3){
+  distancias_G3[j] = t(x3[j,]-xbarraG3)%*%ISG3%*%(x3[j,]-xbarraG3)
+}
+ind_sel_G30.20 = x3[distancias_G3 < front_boot_G30.20,]
+lines(ellipse(SG3,centre=xbarraG3,t=sqrt(front_boot_G30.20),npoints=1000),col="green", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+ind_sel_G30.10 = x3[distancias_G3 < front_boot_G30.10,]
+lines(ellipse(SG3,centre=xbarraG3,t=sqrt(front_boot_G30.10),npoints=1000),col="green", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+ind_sel_G30.05 = x3[distancias_G3 < front_boot_G30.05,]
+lines(ellipse(SG3,centre=xbarraG3,t=sqrt(front_boot_G30.05),npoints=1000),col="yellow", 
+      lwd=3, xlim=c(-4.3,4),ylim=c(-2,5))
+
+## Means vector of "high" class
+points(xbarraG3[1],xbarraG3[2], col='blue',pch=24)
+
+
+## Points of intersection and straight line (points must be obtained and inserted)
+#Border between low and medium (Straight line)
+points(10.645,2.871, col='darkred',pch=19)
+points(10.493,0.067,col='darkred',pch=19)
+ex23 <- expression(y == 18.447*x-193.501)
+legend("topright", c("Low", "Medium","High"), col = c("black", "red","green"),
+       lty=1,bty="n", ncol=1)
+abline(-193.501,18.447,col='blue',lwd=3)
+
+#Border between medium and high (Straight line)
+points(12.5785,3.50142, col='darkred',pch=19)
+points(13.1238,-0.0932998,col='darkred',pch=19)
+ex12 <- expression(y == -6.59219*x+86.4212)
+legend("topleft", c("Low", "Medium","High"), col = c("black", "red","green"),
+       lty=1,bty="n", ncol=1)
+legend("topright", c(ex23,ex12), col = c('blue','darkred'),
+       lty=1,bty="n", ncol=1)
+abline(86.4212,-6.59219,col='darkred',lwd=3)
